@@ -39,6 +39,33 @@ def _fetch_with_fallback(base_url: str, name: str, endpoints: list[str], timeout
     raise RuntimeError(f"Could not fetch {name}. Tried {endpoints}. Last error: {last_error}")
 
 
+def _fetch_with_fallback_safe(
+    base_url: str,
+    name: str,
+    endpoints: list[str],
+    timeout_seconds: int,
+    api_key: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    try:
+        return _fetch_with_fallback(
+            base_url=base_url,
+            name=name,
+            endpoints=endpoints,
+            timeout_seconds=timeout_seconds,
+            api_key=api_key,
+        )
+    except Exception as exc:  # noqa: BLE001 - this is a user-facing probe script.
+        return (
+            "",
+            {
+                "ok": False,
+                "error": str(exc),
+                "name": name,
+                "endpoints_tried": endpoints,
+            },
+        )
+
+
 def _extract_first_job_id(payload: dict[str, Any]) -> str | None:
     jobs_value = payload.get("jobs")
     if isinstance(jobs_value, list) and jobs_value:
@@ -78,21 +105,21 @@ def main() -> None:
     stats_candidates = ["/stats", "/platform-stats"]
     list_jobs_candidates = ["/jobs?limit=20&offset=0", "/jobs"]
 
-    leaderboard_endpoint, leaderboard_payload = _fetch_with_fallback(
+    leaderboard_endpoint, leaderboard_payload = _fetch_with_fallback_safe(
         args.base_url,
         name="leaderboard",
         endpoints=leaderboard_candidates,
         timeout_seconds=args.timeout_seconds,
         api_key=args.api_key,
     )
-    stats_endpoint, stats_payload = _fetch_with_fallback(
+    stats_endpoint, stats_payload = _fetch_with_fallback_safe(
         args.base_url,
         name="platform stats",
         endpoints=stats_candidates,
         timeout_seconds=args.timeout_seconds,
         api_key=args.api_key,
     )
-    list_jobs_endpoint, list_jobs_payload = _fetch_with_fallback(
+    list_jobs_endpoint, list_jobs_payload = _fetch_with_fallback_safe(
         args.base_url,
         name="list jobs",
         endpoints=list_jobs_candidates,
@@ -102,7 +129,7 @@ def main() -> None:
 
     selected_job_id = args.job_id.strip() or _extract_first_job_id(list_jobs_payload)
     if selected_job_id:
-        job_detail_endpoint, job_detail_payload = _fetch_with_fallback(
+        job_detail_endpoint, job_detail_payload = _fetch_with_fallback_safe(
             args.base_url,
             name="get job",
             endpoints=[f"/jobs/{selected_job_id}"],
