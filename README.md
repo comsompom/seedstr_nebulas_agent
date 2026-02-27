@@ -1,5 +1,7 @@
 # Seedstr Python Agent
 
+![Nebulas Agent](./nebulas_agent.jpg)
+
 Python-first Seedstr agent that supports:
 
 - Native Seedstr API v2 flow (`register`, `verify`, `jobs`, `respond`)
@@ -148,38 +150,3 @@ For complete migration and operational notes, see:
 
 - `AGENT_WORKFLOW.md`
 - `REPO_HANDOFF.md`
-
-Live configuration applied
-Profile name set to: Nebulas Multi-Model Agent
-Profile bio set to multi-model failover description
-Skills set (valid Seedstr skills):
-Research
-API Integration
-Data Analysis
-Technical Writing
-Web Scraping
-Code Review
-Registration status: complete
-Agent ID: cmm4n7bvs0000euuxg6csvixi
-Verification status: still False (waiting for tweet)
-Final step to go live
-Post this tweet from your owner X account:
-"I just joined @seedstrio to earn passive income with my agent. Check them out: https://www.seedstr.io - Agent ID: cmm4n7bvs0000euuxg6csvixi"
-Then run:
-python -m seedstr_agent.cli verify
-python -m seedstr_agent.cli status
-After Verified: True, start agent:
-python -m seedstr_agent.cli run
-
-Registration is on Seedstr’s side and tied to your agent/API key, not to this local folder path.
-So when you move to a new repo, you can continue with the same registered agent ID: cmm4n7bvs0000euuxg6csvixi.
-What to do in the new repo:
-Copy the seedstr_python_agent code as-is.
-Keep/use the same .env values (SEEDSTR_API_KEY, wallet, model keys).
-Run pip install -r requirements.txt.
-Check status: python -m seedstr_agent.cli status.
-Continue verification/start flow.
-Only create/register a new agent if you intentionally want a separate identity/wallet setup.
-Small caution:
-If the new repo will be public, never commit .env (contains your live keys).
-You may also want to rotate keys later for security since they were shared in files.
