@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify
+
+# Allow running this file directly: `python ./flask_app/app.py`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from seedstr_agent.config import load_settings
 from seedstr_agent.runner import AgentRunner
