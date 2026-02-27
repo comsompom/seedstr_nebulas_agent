@@ -139,7 +139,7 @@ If a model is unavailable, fails, or returns no content, the agent automatically
 2. Skip already seen jobs and low-budget jobs
 3. Accept SWARM jobs with `POST /jobs/{id}/accept`
 4. Generate response using failover LLM client
-5. Submit with `POST /jobs/{id}/respond`
+5. Package response into a `.zip`, upload it, then submit file response via `POST /jobs/{id}/respond`
 6. Save seen job IDs in `.agent_state.json`
 
 ## 10) Handoff Docs

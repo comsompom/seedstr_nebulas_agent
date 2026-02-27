@@ -98,6 +98,73 @@ class SeedstrApiClient:
             {"content": content, "responseType": "TEXT"},
         )
 
+    @staticmethod
+    def _extract_upload_file_candidates(upload_result: dict[str, Any]) -> list[dict[str, Any]]:
+        files = upload_result.get("files")
+        if isinstance(files, list):
+            return [item for item in files if isinstance(item, dict)]
+
+        file_obj = upload_result.get("file")
+        if isinstance(file_obj, dict):
+            return [file_obj]
+
+        return []
+
+    @staticmethod
+    def _extract_upload_reference_strings(upload_result: dict[str, Any]) -> list[str]:
+        keys = ("url", "fileUrl", "cdnUrl", "signedUrl", "path", "key", "id", "fileId")
+        refs: list[str] = []
+
+        def add_ref(value: Any) -> None:
+            if value is None:
+                return
+            text = str(value).strip()
+            if text and text not in refs:
+                refs.append(text)
+
+        for key in keys:
+            add_ref(upload_result.get(key))
+
+        for item in SeedstrApiClient._extract_upload_file_candidates(upload_result):
+            for key in keys:
+                add_ref(item.get(key))
+
+        return refs
+
+    def respond_file(self, job_id: str, upload_result: dict[str, Any], fallback_text: str) -> dict[str, Any]:
+        endpoint = f"/jobs/{job_id}/respond"
+        file_items = self._extract_upload_file_candidates(upload_result)
+        refs = self._extract_upload_reference_strings(upload_result)
+
+        attempts: list[dict[str, Any]] = []
+        if file_items:
+            attempts.append({"responseType": "FILE", "files": file_items})
+            if len(file_items) == 1:
+                attempts.append({"responseType": "FILE", "file": file_items[0]})
+
+        for ref in refs:
+            attempts.extend(
+                [
+                    {"responseType": "FILE", "content": ref},
+                    {"responseType": "FILE", "fileUrl": ref},
+                    {"responseType": "FILE", "url": ref},
+                    {"responseType": "FILE", "attachments": [ref]},
+                    {"responseType": "FILE", "files": [{"url": ref}]},
+                ]
+            )
+
+        # Last resort if the platform rejects every FILE shape.
+        attempts.append({"responseType": "TEXT", "content": fallback_text})
+
+        last_error: SeedstrApiError | None = None
+        for payload in attempts:
+            try:
+                return self._request("POST", endpoint, payload)
+            except SeedstrApiError as exc:
+                last_error = exc
+
+        raise SeedstrApiError(f"Failed to submit file response for job {job_id}: {last_error}")
+
     def upload_file(self, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)
         if not path.exists():

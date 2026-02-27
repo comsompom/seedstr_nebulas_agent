@@ -10,7 +10,7 @@ This document describes expected runtime behavior for the Python agent.
    - evaluate effective budget (`budgetPerAgent` for SWARM, else `budget`)
    - accept SWARM slots when needed
    - call LLM with automatic provider/model fallback
-   - submit final text response
+   - build `.zip` payload (response + metadata), upload file, submit final file response
 4. Persist processed jobs to avoid duplicate responses
 5. Sleep for configured interval and repeat
 

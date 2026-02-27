@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import time
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -93,8 +96,18 @@ class AgentRunner:
 
         try:
             answer, used_model = self.llm.generate(prompt=prompt, system_prompt=system_prompt)
-            self.api.respond_text(job_id, answer)
-            self.logger.info("Submitted response for %s using %s", job_id, used_model)
+            with tempfile.TemporaryDirectory(prefix=f"seedstr-{job_id}-") as temp_dir:
+                archive_path = Path(temp_dir) / f"seedstr-job-{job_id}-response.zip"
+                self._create_submission_archive(
+                    archive_path=archive_path,
+                    job_id=job_id,
+                    prompt=prompt,
+                    answer=answer,
+                    model_name=used_model,
+                )
+                upload_result = self.api.upload_file(archive_path)
+                self.api.respond_file(job_id, upload_result=upload_result, fallback_text=answer)
+            self.logger.info("Submitted ZIP response for %s using %s", job_id, used_model)
             self._mark_seen(job_id)
         except Exception as exc:
             self.logger.error("Failed processing job %s: %s", job_id, exc)
@@ -130,4 +143,23 @@ class AgentRunner:
             json.dumps({"seen_jobs": trimmed}, indent=2),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _create_submission_archive(
+        *,
+        archive_path: Path,
+        job_id: str,
+        prompt: str,
+        answer: str,
+        model_name: str,
+    ) -> None:
+        metadata = {
+            "job_id": job_id,
+            "model": model_name,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
+        with zipfile.ZipFile(archive_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr("response.txt", f"{answer.rstrip()}\n")
+            zip_file.writestr("prompt.txt", f"{prompt.rstrip()}\n")
+            zip_file.writestr("metadata.json", json.dumps(metadata, indent=2))
 
