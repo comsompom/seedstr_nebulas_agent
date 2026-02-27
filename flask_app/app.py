@@ -33,11 +33,12 @@ app = Flask(__name__)
 
 def _start_agent_loop() -> None:
     with _AGENT_LOCK:
-        if AGENT_STATUS["started"]:
+        if AGENT_STATUS["running"]:
             return
         AGENT_STATUS["started"] = True
         AGENT_STATUS["running"] = True
         AGENT_STATUS["last_started_utc"] = datetime.now(timezone.utc).isoformat()
+        AGENT_STATUS["last_error"] = None
 
     logger = logging.getLogger("seedstr-agent-flask")
     try:
@@ -52,7 +53,7 @@ def _start_agent_loop() -> None:
 
 
 def _ensure_agent_thread() -> None:
-    if AGENT_STATUS["started"]:
+    if AGENT_STATUS["running"]:
         return
     worker = threading.Thread(target=_start_agent_loop, daemon=True, name="seedstr-agent-worker")
     worker.start()

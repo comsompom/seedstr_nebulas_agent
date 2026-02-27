@@ -26,13 +26,16 @@ class SeedstrApiClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        response = requests.request(
-            method=method,
-            url=f"{self.base_url}{endpoint}",
-            json=payload,
-            headers=headers,
-            timeout=self.timeout_seconds,
-        )
+        try:
+            response = requests.request(
+                method=method,
+                url=f"{self.base_url}{endpoint}",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise SeedstrApiError(f"HTTP request failed: {exc}") from exc
 
         try:
             data = response.json()
