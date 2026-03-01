@@ -61,6 +61,7 @@ def main() -> None:
     )
     sub.add_parser("run", help="Run the polling loop forever")
     sub.add_parser("once", help="Run one polling cycle and exit")
+    sub.add_parser("reset-state", help="Clear local seen-jobs cache (.agent_state.json)")
 
     args = parser.parse_args()
     settings = load_settings()
@@ -73,6 +74,7 @@ def main() -> None:
 
     project_root = Path(__file__).resolve().parents[1]
     env_path = project_root / ".env"
+    state_path = settings.state_path
 
     if args.command == "register":
         wallet = (args.wallet or settings.solana_wallet_address).strip()
@@ -92,6 +94,14 @@ def main() -> None:
         except SeedstrApiError as exc:
             logger.error("Registration failed: %s", exc)
             raise SystemExit(1) from exc
+        return
+
+    if args.command == "reset-state":
+        if state_path.exists():
+            state_path.unlink()
+            logger.info("Deleted state file: %s", state_path)
+        else:
+            logger.info("State file does not exist: %s", state_path)
         return
 
     if not settings.seedstr_api_key:

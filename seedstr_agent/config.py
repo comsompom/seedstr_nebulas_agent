@@ -11,6 +11,12 @@ def _split_models(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _to_bool(raw: str | None, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass
 class Settings:
     seedstr_base_url: str
@@ -27,6 +33,7 @@ class Settings:
     request_timeout_seconds: int
     log_level: str
     state_path: Path
+    reprocess_seen_jobs: bool = False
 
     @property
     def has_llm_provider(self) -> bool:
@@ -62,5 +69,6 @@ def load_settings() -> Settings:
         request_timeout_seconds=int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         state_path=Path(os.getenv("STATE_PATH", str(default_state_path))),
+        reprocess_seen_jobs=_to_bool(os.getenv("REPROCESS_SEEN_JOBS"), default=False),
     )
 

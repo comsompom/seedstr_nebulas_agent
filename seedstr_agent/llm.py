@@ -114,6 +114,9 @@ class LLMFailoverClient:
 
         if "quota" in lowered or "resource_exhausted" in lowered or "too many requests" in lowered:
             wait_seconds = self._parse_retry_seconds(message) or 60
+            # When day-level free-tier quota is exhausted, short retry delays are misleading.
+            if "perday" in lowered or "limit: 0" in lowered:
+                wait_seconds = max(wait_seconds, 1800)
             self._gemini_cooldown_until_epoch = max(
                 self._gemini_cooldown_until_epoch,
                 time.time() + wait_seconds,

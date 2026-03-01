@@ -167,6 +167,19 @@ class RunnerTests(unittest.TestCase):
             runner.run_once()
             self.assertEqual(len(runner.llm.calls), first_call_count)
 
+    def test_marks_seen_when_already_submitted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = self._runner(tmp)
+            fake_api = FakeApi()
+            fake_api.jobs_payload = {"jobs": [{"id": "5", "budget": 2.0, "prompt": "task"}]}
+            fake_api.respond_error = RuntimeError("You have already submitted a response to this job")
+            runner.api = fake_api
+            runner.llm = FakeLLM(answer="x", model="openai:model")
+
+            runner.run_once()
+            state = json.loads(runner.settings.state_path.read_text(encoding="utf-8"))
+            self.assertIn("5", state["seen_jobs"])
+
 
 if __name__ == "__main__":
     unittest.main()

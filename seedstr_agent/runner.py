@@ -36,8 +36,14 @@ class AgentRunner:
 
     def run_forever(self) -> None:
         self.logger.info("Agent started. Polling every %ss", self.settings.poll_interval_seconds)
+        cycle = 0
         while True:
-            self.run_once()
+            try:
+                cycle += 1
+                self.logger.info("Polling cycle %s started", cycle)
+                self.run_once()
+            except Exception as exc:  # noqa: BLE001 - keep long-running worker alive.
+                self.logger.exception("Unhandled polling cycle error: %s", exc)
             time.sleep(self.settings.poll_interval_seconds)
 
     def run_once(self) -> None:
@@ -48,24 +54,49 @@ class AgentRunner:
             return
 
         jobs = payload.get("jobs", [])
+        self.logger.info("Fetched %s jobs from marketplace", len(jobs))
         if not jobs:
             self.logger.info("No jobs available")
             return
 
+        counts = {
+            "submitted": 0,
+            "deferred": 0,
+            "skipped_seen": 0,
+            "skipped_budget": 0,
+            "skipped_other": 0,
+            "failed": 0,
+        }
         for job in jobs:
-            self._process_job(job)
+            outcome = self._process_job(job)
+            if outcome in counts:
+                counts[outcome] += 1
+            elif outcome.startswith("skipped_"):
+                counts["skipped_other"] += 1
+            else:
+                counts["failed"] += 1
+        self.logger.info(
+            "Cycle summary: submitted=%s deferred=%s skipped_seen=%s skipped_budget=%s skipped_other=%s failed=%s",
+            counts["submitted"],
+            counts["deferred"],
+            counts["skipped_seen"],
+            counts["skipped_budget"],
+            counts["skipped_other"],
+            counts["failed"],
+        )
 
-    def _process_job(self, job: dict[str, Any]) -> None:
+    def _process_job(self, job: dict[str, Any]) -> str:
         job_id = str(job.get("id", ""))
         if not job_id:
-            return
+            return "skipped_invalid_id"
 
-        if job_id in self._seen_jobs:
-            return
+        if (not self.settings.reprocess_seen_jobs) and job_id in self._seen_jobs:
+            return "skipped_seen"
 
         defer_until = self._deferred_jobs.get(job_id)
         if defer_until and time.time() < defer_until:
-            return
+            self.logger.debug("Job %s is deferred for another %ss", job_id, int(defer_until - time.time()))
+            return "deferred"
         if defer_until and time.time() >= defer_until:
             del self._deferred_jobs[job_id]
 
@@ -78,7 +109,7 @@ class AgentRunner:
                 self.settings.min_budget_usd,
             )
             self._mark_seen(job_id)
-            return
+            return "skipped_budget"
 
         job_type = str(job.get("jobType", "STANDARD"))
         if job_type == "SWARM":
@@ -88,13 +119,13 @@ class AgentRunner:
             except SeedstrApiError as exc:
                 self.logger.warning("Could not accept SWARM job %s: %s", job_id, exc)
                 self._mark_seen(job_id)
-                return
+                return "skipped_accept_failed"
 
         prompt = str(job.get("prompt", "")).strip()
         if not prompt:
             self.logger.warning("Job %s has empty prompt", job_id)
             self._mark_seen(job_id)
-            return
+            return "skipped_empty_prompt"
 
         system_prompt = (
             "You are an autonomous Seedstr marketplace agent. "
@@ -118,7 +149,12 @@ class AgentRunner:
             self.logger.info("Submitted ZIP response for %s using %s", job_id, used_model)
             self._deferred_jobs.pop(job_id, None)
             self._mark_seen(job_id)
+            return "submitted"
         except Exception as exc:
+            if self._is_already_submitted_error(exc):
+                self.logger.info("Job %s already has a submitted response; marking as seen", job_id)
+                self._mark_seen(job_id)
+                return "skipped_already_submitted"
             retry_after = self._retry_after_seconds_from_error(exc)
             if retry_after is not None:
                 self._deferred_jobs[job_id] = time.time() + retry_after
@@ -127,8 +163,14 @@ class AgentRunner:
                     job_id,
                     retry_after,
                 )
-                return
+                return "deferred"
             self.logger.error("Failed processing job %s: %s", job_id, exc)
+            return "failed"
+
+    @staticmethod
+    def _is_already_submitted_error(error: Exception) -> bool:
+        message = str(error).lower()
+        return "already submitted a response to this job" in message
 
     @staticmethod
     def _effective_budget(job: dict[str, Any]) -> float:
