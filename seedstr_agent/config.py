@@ -11,6 +11,26 @@ def _split_models(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _normalize_seedstr_base_url(raw: str) -> str:
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        return "https://www.seedstr.io/api/v2"
+
+    # Legacy/incorrect host seen in some env setups.
+    if "api.seedstr.io" in value:
+        return "https://www.seedstr.io/api/v2"
+
+    # If user provides site root or docs host, force API v2 base.
+    if value.startswith("https://www.seedstr.io") and "/api/v2" not in value:
+        return "https://www.seedstr.io/api/v2"
+
+    # If user provides /api, upgrade to /api/v2.
+    if value.endswith("/api"):
+        return f"{value}/v2"
+
+    return value
+
+
 def _to_bool(raw: str | None, default: bool = False) -> bool:
     if raw is None:
         return default
@@ -50,7 +70,7 @@ def load_settings() -> Settings:
     default_state_path = base_dir / ".agent_state.json"
 
     return Settings(
-        seedstr_base_url=os.getenv("SEEDSTR_BASE_URL", "https://www.seedstr.io/api/v2").rstrip("/"),
+        seedstr_base_url=_normalize_seedstr_base_url(os.getenv("SEEDSTR_BASE_URL", "https://www.seedstr.io/api/v2")),
         seedstr_api_key=os.getenv("SEEDSTR_API_KEY", "").strip(),
         solana_wallet_address=os.getenv("SOLANA_WALLET_ADDRESS", "").strip(),
         seedstr_owner_url=os.getenv("SEEDSTR_OWNER_URL", "").strip() or None,

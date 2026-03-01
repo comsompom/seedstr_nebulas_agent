@@ -68,15 +68,25 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         timeout_seconds=settings.request_timeout_seconds,
     )
     metrics: dict[str, Any] = {
+        "base_url": settings.seedstr_base_url,
         "agent_id": None,
         "jobs_present": None,
         "jobs_submitted": None,
+        "me_summary": None,
+        "jobs_summary": None,
     }
 
     try:
         me = api.get_me()
         metrics["agent_id"] = me.get("id")
         metrics["jobs_submitted"] = me.get("jobsCompleted", me.get("jobsSubmitted", 0))
+        verification = me.get("verification", {}) if isinstance(me.get("verification"), dict) else {}
+        metrics["me_summary"] = {
+            "id": me.get("id"),
+            "name": me.get("name"),
+            "verified": verification.get("isVerified"),
+            "jobs_completed": me.get("jobsCompleted", 0),
+        }
     except SeedstrApiError as exc:
         metrics["profile_error"] = str(exc)
 
@@ -85,6 +95,10 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         jobs = jobs_payload.get("jobs", [])
         total = jobs_payload.get("total")
         metrics["jobs_present"] = total if isinstance(total, int) else len(jobs)
+        metrics["jobs_summary"] = {
+            "count": len(jobs),
+            "ids": [str(job.get("id")) for job in jobs if isinstance(job, dict) and job.get("id") is not None],
+        }
     except SeedstrApiError as exc:
         metrics["jobs_error"] = str(exc)
 
