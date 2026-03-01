@@ -17,8 +17,9 @@ class LLMTests(unittest.TestCase):
             LLMFailoverClient("", "", [], [], self.logger)
 
     def test_generate_falls_back_between_targets(self) -> None:
-        with patch("seedstr_agent.llm.OpenAI") as openai_cls, patch("seedstr_agent.llm.genai.configure"):
+        with patch("seedstr_agent.llm.OpenAI") as openai_cls, patch("seedstr_agent.llm.genai.Client") as gemini_cls:
             openai_cls.return_value = MagicMock()
+            gemini_cls.return_value = MagicMock()
             client = LLMFailoverClient(
                 gemini_api_key="g",
                 openai_api_key="o",
@@ -66,6 +67,30 @@ class LLMTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "OpenAI response is empty"):
             client._generate_openai("o1", "p", "s")
+
+    def test_gemini_quota_sets_cooldown_and_skips_next_time(self) -> None:
+        with patch("seedstr_agent.llm.OpenAI") as openai_cls, patch("seedstr_agent.llm.genai.Client") as gemini_cls:
+            openai_cls.return_value = MagicMock()
+            gemini_cls.return_value = MagicMock()
+            client = LLMFailoverClient(
+                gemini_api_key="g",
+                openai_api_key="o",
+                gemini_models=["g1"],
+                openai_models=["o1"],
+                logger=self.logger,
+            )
+
+        client._generate_gemini = MagicMock(side_effect=RuntimeError("RESOURCE_EXHAUSTED. Please retry in 30s"))  # type: ignore[method-assign]
+        client._generate_openai = MagicMock(return_value="ok")  # type: ignore[method-assign]
+
+        text, used = client.generate(prompt="hello", system_prompt="system")
+        self.assertEqual((text, used), ("ok", "openai:o1"))
+        self.assertEqual(client._generate_gemini.call_count, 1)
+
+        # Should skip gemini while cooldown is active.
+        text2, used2 = client.generate(prompt="hello2", system_prompt="system")
+        self.assertEqual((text2, used2), ("ok", "openai:o1"))
+        self.assertEqual(client._generate_gemini.call_count, 1)
 
 
 if __name__ == "__main__":

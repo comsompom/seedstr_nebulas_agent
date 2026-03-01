@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -161,12 +163,34 @@ class SeedstrApiClient:
 
         last_error: SeedstrApiError | None = None
         for payload in attempts:
+            retries = 0
             try:
                 return self._request("POST", endpoint, payload)
             except SeedstrApiError as exc:
                 last_error = exc
+                retry_after = self._retry_after_seconds(exc)
+                if retry_after is not None and retries == 0 and retry_after <= 20:
+                    retries += 1
+                    time.sleep(retry_after + 1)
+                    try:
+                        return self._request("POST", endpoint, payload)
+                    except SeedstrApiError as retry_exc:
+                        last_error = retry_exc
+                # Do not keep trying alternate payload shapes when rate-limited.
+                if retry_after is not None:
+                    break
 
         raise SeedstrApiError(f"Failed to submit file response for job {job_id}: {last_error}")
+
+    @staticmethod
+    def _retry_after_seconds(error: SeedstrApiError) -> int | None:
+        message = str(error)
+        if "too many requests" not in message.lower():
+            return None
+        match = re.search(r"try again in\s+(\d+)\s+seconds", message, flags=re.IGNORECASE)
+        if not match:
+            return 1
+        return int(match.group(1))
 
     def upload_file(self, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)

@@ -18,6 +18,7 @@ class FakeApi:
         self.accepted: list[str] = []
         self.uploaded: list[Path] = []
         self.responded: list[tuple[str, dict[str, object], str]] = []
+        self.respond_error: Exception | None = None
 
     def list_jobs(self, limit: int, offset: int) -> dict[str, object]:
         return self.jobs_payload
@@ -32,6 +33,8 @@ class FakeApi:
         return {"files": [{"url": f"https://cdn.example/{path_obj.name}"}]}
 
     def respond_file(self, job_id: str, upload_result: dict[str, object], fallback_text: str) -> dict[str, object]:
+        if self.respond_error is not None:
+            raise self.respond_error
         self.responded.append((job_id, upload_result, fallback_text))
         return {"ok": True}
 
@@ -146,6 +149,23 @@ class RunnerTests(unittest.TestCase):
                 metadata = json.loads(zf.read("metadata.json").decode("utf-8"))
                 self.assertEqual(metadata["job_id"], "job-x")
                 self.assertEqual(metadata["model"], "openai:test")
+
+    def test_defers_job_when_rate_limited(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = self._runner(tmp)
+            fake_api = FakeApi()
+            fake_api.jobs_payload = {"jobs": [{"id": "4", "budget": 2.0, "prompt": "task"}]}
+            fake_api.respond_error = RuntimeError("Too many requests. Please try again in 3000 seconds.")
+            runner.api = fake_api
+            runner.llm = FakeLLM(answer="x", model="openai:model")
+
+            runner.run_once()
+            self.assertIn("4", runner._deferred_jobs)
+
+            # Immediate second run should skip processing deferred job.
+            first_call_count = len(runner.llm.calls)
+            runner.run_once()
+            self.assertEqual(len(runner.llm.calls), first_call_count)
 
 
 if __name__ == "__main__":

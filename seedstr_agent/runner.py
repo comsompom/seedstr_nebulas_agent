@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import tempfile
 import time
 import zipfile
@@ -31,6 +32,7 @@ class AgentRunner:
             logger=logger,
         )
         self._seen_jobs = self._load_seen_jobs(settings.state_path)
+        self._deferred_jobs: dict[str, float] = {}
 
     def run_forever(self) -> None:
         self.logger.info("Agent started. Polling every %ss", self.settings.poll_interval_seconds)
@@ -60,6 +62,12 @@ class AgentRunner:
 
         if job_id in self._seen_jobs:
             return
+
+        defer_until = self._deferred_jobs.get(job_id)
+        if defer_until and time.time() < defer_until:
+            return
+        if defer_until and time.time() >= defer_until:
+            del self._deferred_jobs[job_id]
 
         effective_budget = self._effective_budget(job)
         if effective_budget < self.settings.min_budget_usd:
@@ -108,8 +116,18 @@ class AgentRunner:
                 upload_result = self.api.upload_file(archive_path)
                 self.api.respond_file(job_id, upload_result=upload_result, fallback_text=answer)
             self.logger.info("Submitted ZIP response for %s using %s", job_id, used_model)
+            self._deferred_jobs.pop(job_id, None)
             self._mark_seen(job_id)
         except Exception as exc:
+            retry_after = self._retry_after_seconds_from_error(exc)
+            if retry_after is not None:
+                self._deferred_jobs[job_id] = time.time() + retry_after
+                self.logger.warning(
+                    "Deferring job %s for %ss due to rate limit",
+                    job_id,
+                    retry_after,
+                )
+                return
             self.logger.error("Failed processing job %s: %s", job_id, exc)
 
     @staticmethod
@@ -143,6 +161,16 @@ class AgentRunner:
             json.dumps({"seen_jobs": trimmed}, indent=2),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _retry_after_seconds_from_error(error: Exception) -> int | None:
+        message = str(error)
+        if "too many requests" not in message.lower():
+            return None
+        match = re.search(r"try again in\s+(\d+)\s+seconds", message, flags=re.IGNORECASE)
+        if not match:
+            return 60
+        return max(1, int(match.group(1)))
 
     @staticmethod
     def _create_submission_archive(
