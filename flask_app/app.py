@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import threading
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,8 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         "agent_id": None,
         "jobs_present": None,
         "jobs_submitted": None,
+        "jobs_completed": None,
+        "local_seen_jobs_count": 0,
         "me_summary": None,
         "jobs_summary": None,
     }
@@ -79,13 +82,15 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
     try:
         me = api.get_me()
         metrics["agent_id"] = me.get("id")
-        metrics["jobs_submitted"] = me.get("jobsCompleted", me.get("jobsSubmitted", 0))
+        metrics["jobs_submitted"] = me.get("jobsSubmitted")
+        metrics["jobs_completed"] = me.get("jobsCompleted")
         verification = me.get("verification", {}) if isinstance(me.get("verification"), dict) else {}
         metrics["me_summary"] = {
             "id": me.get("id"),
             "name": me.get("name"),
             "verified": verification.get("isVerified"),
             "jobs_completed": me.get("jobsCompleted", 0),
+            "jobs_submitted": me.get("jobsSubmitted"),
         }
     except SeedstrApiError as exc:
         metrics["profile_error"] = str(exc)
@@ -101,6 +106,15 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         }
     except SeedstrApiError as exc:
         metrics["jobs_error"] = str(exc)
+
+    try:
+        if settings.state_path.exists():
+            state_payload = json.loads(settings.state_path.read_text(encoding="utf-8"))
+            seen_jobs = state_payload.get("seen_jobs", [])
+            if isinstance(seen_jobs, list):
+                metrics["local_seen_jobs_count"] = len(seen_jobs)
+    except Exception:
+        metrics["local_seen_jobs_count"] = 0
 
     return metrics
 
@@ -118,6 +132,8 @@ def health_check() -> tuple[dict[str, Any], int]:
             "agent_id": seedstr_metrics.get("agent_id"),
             "jobs_present": seedstr_metrics.get("jobs_present"),
             "jobs_submitted": seedstr_metrics.get("jobs_submitted"),
+            "jobs_completed": seedstr_metrics.get("jobs_completed"),
+            "local_seen_jobs_count": seedstr_metrics.get("local_seen_jobs_count"),
             "seedstr_metrics": seedstr_metrics,
         },
         200,
@@ -136,6 +152,8 @@ def healthz() -> tuple[dict[str, Any], int]:
                 "agent_id": seedstr_metrics.get("agent_id"),
                 "jobs_present": seedstr_metrics.get("jobs_present"),
                 "jobs_submitted": seedstr_metrics.get("jobs_submitted"),
+                "jobs_completed": seedstr_metrics.get("jobs_completed"),
+                "local_seen_jobs_count": seedstr_metrics.get("local_seen_jobs_count"),
                 "seedstr_metrics": seedstr_metrics,
             }
         ),
