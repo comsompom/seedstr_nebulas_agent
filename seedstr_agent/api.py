@@ -142,21 +142,13 @@ class SeedstrApiClient:
         refs = self._extract_upload_reference_strings(upload_result)
 
         attempts: list[dict[str, Any]] = []
-        if file_items:
-            attempts.append({"responseType": "FILE", "files": file_items})
-            if len(file_items) == 1:
-                attempts.append({"responseType": "FILE", "file": file_items[0]})
-
+        # Prefer a canonical file payload shape: FILE response + string content.
         for ref in refs:
-            attempts.extend(
-                [
-                    {"responseType": "FILE", "content": ref},
-                    {"responseType": "FILE", "fileUrl": ref},
-                    {"responseType": "FILE", "url": ref},
-                    {"responseType": "FILE", "attachments": [ref]},
-                    {"responseType": "FILE", "files": [{"url": ref}]},
-                ]
-            )
+            attempts.append({"responseType": "FILE", "content": ref})
+
+        # Legacy fallback for APIs expecting uploaded file objects.
+        if not attempts and file_items:
+            attempts.append({"responseType": "FILE", "files": file_items})
 
         # Last resort if the platform rejects every FILE shape.
         attempts.append({"responseType": "TEXT", "content": fallback_text})
@@ -168,6 +160,9 @@ class SeedstrApiClient:
                 return self._request("POST", endpoint, payload)
             except SeedstrApiError as exc:
                 last_error = exc
+                # Some payload shapes trigger strict schema errors; keep trying safer shapes.
+                if self._is_invalid_string_input_error(exc):
+                    continue
                 retry_after = self._retry_after_seconds(exc)
                 if retry_after is not None and retries == 0 and retry_after <= 20:
                     retries += 1
@@ -191,6 +186,13 @@ class SeedstrApiClient:
         if not match:
             return 1
         return int(match.group(1))
+
+    @staticmethod
+    def _is_invalid_string_input_error(error: SeedstrApiError) -> bool:
+        message = str(error).lower()
+        return "expected string, received undefined" in message or (
+            "invalid input" in message and "expected string" in message
+        )
 
     def upload_file(self, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)

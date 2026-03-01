@@ -109,6 +109,26 @@ class ApiClientTests(unittest.TestCase):
             with self.assertRaisesRegex(SeedstrApiError, "Failed to submit file response"):
                 self.client.respond_file("job-1", {"files": [{"url": "x"}]}, fallback_text="fallback")
 
+    def test_respond_file_handles_invalid_string_error_then_fallback(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake_request(method: str, endpoint: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+            call_payload = payload or {}
+            calls.append(call_payload)
+            if call_payload.get("responseType") == "FILE":
+                raise SeedstrApiError("Invalid input: expected string, received undefined")
+            return {"ok": True}
+
+        with patch.object(self.client, "_request", side_effect=fake_request):
+            result = self.client.respond_file(
+                "job-1",
+                {"files": [{"url": "https://cdn.example/file.zip"}]},
+                fallback_text="fallback",
+            )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(calls[-1]["responseType"], "TEXT")
+
 
 if __name__ == "__main__":
     unittest.main()
