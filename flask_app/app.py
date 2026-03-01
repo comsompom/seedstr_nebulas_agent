@@ -72,9 +72,16 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         "base_url": settings.seedstr_base_url,
         "agent_id": None,
         "jobs_present": None,
-        "jobs_submitted": None,
+        "jobs_submitted": 0,
+        "jobs_submitted_source": "default_zero",
         "jobs_completed": None,
         "local_seen_jobs_count": 0,
+        "llm_config": {
+            "gemini_enabled": bool(settings.gemini_api_key and settings.gemini_models),
+            "openai_enabled": bool(settings.openai_api_key and settings.openai_models),
+            "gemini_models": settings.gemini_models,
+            "openai_models": settings.openai_models,
+        },
         "me_summary": None,
         "jobs_summary": None,
     }
@@ -82,7 +89,12 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
     try:
         me = api.get_me()
         metrics["agent_id"] = me.get("id")
-        metrics["jobs_submitted"] = me.get("jobsSubmitted")
+        jobs_submitted = me.get("jobsSubmitted")
+        if jobs_submitted is not None:
+            metrics["jobs_submitted"] = jobs_submitted
+            metrics["jobs_submitted_source"] = "seedstr_me.jobsSubmitted"
+        else:
+            metrics["jobs_submitted_source"] = "fallback_local_seen_jobs_count"
         metrics["jobs_completed"] = me.get("jobsCompleted")
         verification = me.get("verification", {}) if isinstance(me.get("verification"), dict) else {}
         metrics["me_summary"] = {
@@ -90,7 +102,7 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
             "name": me.get("name"),
             "verified": verification.get("isVerified"),
             "jobs_completed": me.get("jobsCompleted", 0),
-            "jobs_submitted": me.get("jobsSubmitted"),
+            "jobs_submitted": jobs_submitted,
         }
     except SeedstrApiError as exc:
         metrics["profile_error"] = str(exc)
@@ -113,6 +125,8 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
             seen_jobs = state_payload.get("seen_jobs", [])
             if isinstance(seen_jobs, list):
                 metrics["local_seen_jobs_count"] = len(seen_jobs)
+                if metrics["jobs_submitted_source"] == "fallback_local_seen_jobs_count":
+                    metrics["jobs_submitted"] = len(seen_jobs)
     except Exception:
         metrics["local_seen_jobs_count"] = 0
 

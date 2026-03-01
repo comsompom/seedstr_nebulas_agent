@@ -79,7 +79,7 @@ def load_settings() -> Settings:
         gemini_models=_split_models(
             os.getenv(
                 "GEMINI_MODELS",
-                "gemini-1.5-flash,gemini-1.5-pro,gemini-2.0-flash,gemini-2.5-pro",
+                "gemini-2.0-flash,gemini-2.5-pro",
             )
         ),
         openai_models=_split_models(os.getenv("OPENAI_MODELS", "gpt-4o-mini,gpt-4.1-mini,gpt-4.1")),
