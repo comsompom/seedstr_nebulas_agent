@@ -67,10 +67,17 @@ class AgentRunner:
             "skipped_other": 0,
             "failed": 0,
         }
+        deferred_waits: list[int] = []
         for job in jobs:
             outcome = self._process_job(job)
             if outcome in counts:
                 counts[outcome] += 1
+            elif outcome.startswith("deferred:"):
+                counts["deferred"] += 1
+                try:
+                    deferred_waits.append(int(outcome.split(":", 1)[1]))
+                except (TypeError, ValueError):
+                    pass
             elif outcome.startswith("skipped_"):
                 counts["skipped_other"] += 1
             else:
@@ -84,6 +91,12 @@ class AgentRunner:
             counts["skipped_other"],
             counts["failed"],
         )
+        if deferred_waits:
+            self.logger.info(
+                "Deferred jobs are pending; next retry in ~%ss (max wait ~%ss)",
+                min(deferred_waits),
+                max(deferred_waits),
+            )
 
     def _process_job(self, job: dict[str, Any]) -> str:
         job_id = str(job.get("id", ""))
@@ -95,8 +108,9 @@ class AgentRunner:
 
         defer_until = self._deferred_jobs.get(job_id)
         if defer_until and time.time() < defer_until:
-            self.logger.debug("Job %s is deferred for another %ss", job_id, int(defer_until - time.time()))
-            return "deferred"
+            seconds_left = max(1, int(defer_until - time.time()))
+            self.logger.info("Job %s is deferred for another %ss", job_id, seconds_left)
+            return f"deferred:{seconds_left}"
         if defer_until and time.time() >= defer_until:
             del self._deferred_jobs[job_id]
 
@@ -163,7 +177,7 @@ class AgentRunner:
                     job_id,
                     retry_after,
                 )
-                return "deferred"
+                return f"deferred:{retry_after}"
             self.logger.error("Failed processing job %s: %s", job_id, exc)
             return "failed"
 
