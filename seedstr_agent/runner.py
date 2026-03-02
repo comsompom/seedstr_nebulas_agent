@@ -33,6 +33,23 @@ class AgentRunner:
         )
         self._seen_jobs = self._load_seen_jobs(settings.state_path)
         self._deferred_jobs: dict[str, float] = {}
+        self._runtime_stats: dict[str, int] = {
+            "cycles": 0,
+            "submitted_total": 0,
+            "deferred_total": 0,
+            "skipped_seen_total": 0,
+            "skipped_budget_total": 0,
+            "skipped_other_total": 0,
+            "failed_total": 0,
+        }
+        self._last_cycle_summary: dict[str, int] = {
+            "submitted": 0,
+            "deferred": 0,
+            "skipped_seen": 0,
+            "skipped_budget": 0,
+            "skipped_other": 0,
+            "failed": 0,
+        }
 
     def run_forever(self) -> None:
         self.logger.info("Agent started. Polling every %ss", self.settings.poll_interval_seconds)
@@ -91,6 +108,14 @@ class AgentRunner:
             counts["skipped_other"],
             counts["failed"],
         )
+        self._runtime_stats["cycles"] += 1
+        self._runtime_stats["submitted_total"] += counts["submitted"]
+        self._runtime_stats["deferred_total"] += counts["deferred"]
+        self._runtime_stats["skipped_seen_total"] += counts["skipped_seen"]
+        self._runtime_stats["skipped_budget_total"] += counts["skipped_budget"]
+        self._runtime_stats["skipped_other_total"] += counts["skipped_other"]
+        self._runtime_stats["failed_total"] += counts["failed"]
+        self._last_cycle_summary = counts.copy()
         if deferred_waits:
             self.logger.info(
                 "Deferred jobs are pending; next retry in ~%ss (max wait ~%ss)",
@@ -246,4 +271,12 @@ class AgentRunner:
             zip_file.writestr("response.txt", f"{answer.rstrip()}\n")
             zip_file.writestr("prompt.txt", f"{prompt.rstrip()}\n")
             zip_file.writestr("metadata.json", json.dumps(metadata, indent=2))
+
+    def get_runtime_stats(self) -> dict[str, Any]:
+        return {
+            **self._runtime_stats,
+            "seen_jobs_count": len(self._seen_jobs),
+            "deferred_jobs_count": len(self._deferred_jobs),
+            "last_cycle": self._last_cycle_summary.copy(),
+        }
 

@@ -29,11 +29,13 @@ AGENT_STATUS: dict[str, Any] = {
     "last_started_utc": None,
 }
 _AGENT_LOCK = threading.Lock()
+RUNNER_INSTANCE: AgentRunner | None = None
 
 app = Flask(__name__)
 
 
 def _start_agent_loop() -> None:
+    global RUNNER_INSTANCE
     with _AGENT_LOCK:
         if AGENT_STATUS["running"]:
             return
@@ -46,11 +48,13 @@ def _start_agent_loop() -> None:
     try:
         settings = load_settings()
         runner = AgentRunner(settings=settings, logger=logger)
+        RUNNER_INSTANCE = runner
         runner.run_forever()
     except Exception as exc:  # noqa: BLE001 - report status for health checks.
         AGENT_STATUS["last_error"] = str(exc)
         logger.exception("Background agent crashed: %s", exc)
     finally:
+        RUNNER_INSTANCE = None
         AGENT_STATUS["running"] = False
 
 
@@ -84,6 +88,7 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
         },
         "me_summary": None,
         "jobs_summary": None,
+        "runner_stats": None,
     }
 
     try:
@@ -129,6 +134,17 @@ def _collect_seedstr_metrics() -> dict[str, Any]:
                     metrics["jobs_submitted"] = len(seen_jobs)
     except Exception:
         metrics["local_seen_jobs_count"] = 0
+
+    if RUNNER_INSTANCE is not None:
+        runtime_stats = RUNNER_INSTANCE.get_runtime_stats()
+        metrics["runner_stats"] = runtime_stats
+        # Prefer runtime submissions because they reflect this live process.
+        runtime_submitted = int(runtime_stats.get("submitted_total", 0))
+        if runtime_submitted > int(metrics.get("jobs_submitted") or 0):
+            metrics["jobs_submitted"] = runtime_submitted
+            metrics["jobs_submitted_source"] = "runner_stats.submitted_total"
+        if runtime_stats.get("seen_jobs_count", 0) > int(metrics.get("local_seen_jobs_count") or 0):
+            metrics["local_seen_jobs_count"] = int(runtime_stats["seen_jobs_count"])
 
     return metrics
 
