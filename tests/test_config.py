@@ -28,6 +28,7 @@ class ConfigTests(unittest.TestCase):
             request_timeout_seconds=30,
             log_level="INFO",
             state_path=Path(".agent_state.json"),
+            submission_log_path=Path(".submission_log.jsonl"),
         )
         self.assertTrue(settings.has_llm_provider)
 
@@ -47,6 +48,7 @@ class ConfigTests(unittest.TestCase):
             request_timeout_seconds=30,
             log_level="INFO",
             state_path=Path(".agent_state.json"),
+            submission_log_path=Path(".submission_log.jsonl"),
         )
         self.assertFalse(settings.has_llm_provider)
 
@@ -66,6 +68,7 @@ class ConfigTests(unittest.TestCase):
             "REQUEST_TIMEOUT_SECONDS": "45",
             "LOG_LEVEL": "debug",
             "STATE_PATH": "custom_state.json",
+            "SUBMISSION_LOG_PATH": "submissions.jsonl",
         }
         with patch.dict(os.environ, env, clear=True):
             settings = config.load_settings()
@@ -81,6 +84,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.request_timeout_seconds, 45)
         self.assertEqual(settings.log_level, "DEBUG")
         self.assertEqual(settings.state_path, Path("custom_state.json"))
+        self.assertEqual(settings.submission_log_path, Path("submissions.jsonl"))
 
 
 if __name__ == "__main__":

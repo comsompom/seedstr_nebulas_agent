@@ -33,6 +33,7 @@ class AgentRunner:
         )
         self._seen_jobs = self._load_seen_jobs(settings.state_path)
         self._deferred_jobs: dict[str, float] = {}
+        self._submission_log_path = settings.submission_log_path
         self._runtime_stats: dict[str, int] = {
             "cycles": 0,
             "submitted_total": 0,
@@ -174,6 +175,7 @@ class AgentRunner:
 
         try:
             answer, used_model = self.llm.generate(prompt=prompt, system_prompt=system_prompt)
+            zip_size_bytes: int | None = None
             with tempfile.TemporaryDirectory(prefix=f"seedstr-{job_id}-") as temp_dir:
                 archive_path = Path(temp_dir) / f"seedstr-job-{job_id}-response.zip"
                 self._create_submission_archive(
@@ -183,19 +185,43 @@ class AgentRunner:
                     answer=answer,
                     model_name=used_model,
                 )
+                zip_size_bytes = archive_path.stat().st_size
                 upload_result = self.api.upload_file(archive_path)
                 self.api.respond_file(job_id, upload_result=upload_result, fallback_text=answer)
+            self._append_submission_log(
+                job_id=job_id,
+                submitted=True,
+                zip_size_bytes=zip_size_bytes,
+                status="submitted",
+                model=used_model,
+            )
             self.logger.info("Submitted ZIP response for %s using %s", job_id, used_model)
             self._deferred_jobs.pop(job_id, None)
             self._mark_seen(job_id)
             return "submitted"
         except Exception as exc:
             if self._is_already_submitted_error(exc):
+                self._append_submission_log(
+                    job_id=job_id,
+                    submitted=False,
+                    zip_size_bytes=None,
+                    status="already_submitted",
+                    model=None,
+                    error=str(exc),
+                )
                 self.logger.info("Job %s already has a submitted response; marking as seen", job_id)
                 self._mark_seen(job_id)
                 return "skipped_already_submitted"
             retry_after = self._retry_after_seconds_from_error(exc)
             if retry_after is not None:
+                self._append_submission_log(
+                    job_id=job_id,
+                    submitted=False,
+                    zip_size_bytes=None,
+                    status="deferred_rate_limit",
+                    model=None,
+                    error=str(exc),
+                )
                 self._deferred_jobs[job_id] = time.time() + retry_after
                 self.logger.warning(
                     "Deferring job %s for %ss due to rate limit",
@@ -203,6 +229,14 @@ class AgentRunner:
                     retry_after,
                 )
                 return f"deferred:{retry_after}"
+            self._append_submission_log(
+                job_id=job_id,
+                submitted=False,
+                zip_size_bytes=None,
+                status="failed",
+                model=None,
+                error=str(exc),
+            )
             self.logger.error("Failed processing job %s: %s", job_id, exc)
             return "failed"
 
@@ -279,4 +313,27 @@ class AgentRunner:
             "deferred_jobs_count": len(self._deferred_jobs),
             "last_cycle": self._last_cycle_summary.copy(),
         }
+
+    def _append_submission_log(
+        self,
+        *,
+        job_id: str,
+        submitted: bool,
+        zip_size_bytes: int | None,
+        status: str,
+        model: str | None,
+        error: str | None = None,
+    ) -> None:
+        entry = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "job_id": job_id,
+            "submitted": submitted,
+            "zip_size_bytes": zip_size_bytes,
+            "status": status,
+            "model": model,
+            "error": error,
+        }
+        self._submission_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._submission_log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(entry, ensure_ascii=True) + "\n")
 

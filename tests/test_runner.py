@@ -67,6 +67,7 @@ class RunnerTests(unittest.TestCase):
             request_timeout_seconds=30,
             log_level="INFO",
             state_path=state_path,
+            submission_log_path=state_path.parent / ".submission_log.jsonl",
         )
 
     def _runner(self, tmp: str) -> AgentRunner:
@@ -149,6 +150,24 @@ class RunnerTests(unittest.TestCase):
                 metadata = json.loads(zf.read("metadata.json").decode("utf-8"))
                 self.assertEqual(metadata["job_id"], "job-x")
                 self.assertEqual(metadata["model"], "openai:test")
+
+    def test_writes_submission_log_on_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = self._runner(tmp)
+            fake_api = FakeApi()
+            fake_api.jobs_payload = {"jobs": [{"id": "6", "budget": 2.0, "prompt": "task"}]}
+            runner.api = fake_api
+            runner.llm = FakeLLM(answer="done", model="openai:model")
+
+            runner.run_once()
+
+            log_path = runner.settings.submission_log_path
+            self.assertTrue(log_path.exists())
+            line = log_path.read_text(encoding="utf-8").strip()
+            payload = json.loads(line)
+            self.assertEqual(payload["job_id"], "6")
+            self.assertTrue(payload["submitted"])
+            self.assertIsInstance(payload["zip_size_bytes"], int)
 
     def test_defers_job_when_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -53,6 +53,7 @@ class Settings:
     request_timeout_seconds: int
     log_level: str
     state_path: Path
+    submission_log_path: Path
     reprocess_seen_jobs: bool = False
 
     @property
@@ -89,6 +90,7 @@ def load_settings() -> Settings:
         request_timeout_seconds=int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         state_path=Path(os.getenv("STATE_PATH", str(default_state_path))),
+        submission_log_path=Path(os.getenv("SUBMISSION_LOG_PATH", str(base_dir / ".submission_log.jsonl"))),
         reprocess_seen_jobs=_to_bool(os.getenv("REPROCESS_SEEN_JOBS"), default=False),
     )
 
