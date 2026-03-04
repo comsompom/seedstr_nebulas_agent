@@ -84,7 +84,7 @@ def load_settings() -> Settings:
             )
         ),
         openai_models=_split_models(os.getenv("OPENAI_MODELS", "gpt-4o-mini,gpt-4.1-mini,gpt-4.1")),
-        poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "30")),
+        poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "180")),
         min_budget_usd=float(os.getenv("MIN_BUDGET_USD", "0.0")),
         max_jobs_per_cycle=int(os.getenv("MAX_JOBS_PER_CYCLE", "20")),
         request_timeout_seconds=int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),
