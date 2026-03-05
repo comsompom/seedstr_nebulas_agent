@@ -346,18 +346,36 @@ class AgentRunner:
             return
 
         status = job_payload.get("status")
-        response_status = None
-        response_id = None
-        response_obj = job_payload.get("response")
-        if isinstance(response_obj, dict):
-            response_status = response_obj.get("status")
-            response_id = response_obj.get("id")
+        response_status, response_id, response_source = self._extract_response_status(job_payload)
+        if response_status is None:
+            response_status = "NOT_EXPOSED"
+        if response_id is None:
+            response_id = "NOT_EXPOSED"
 
         self.logger.info(
-            "Server job status for %s: job_status=%s response_status=%s response_id=%s",
+            "Server job status for %s: job_status=%s response_status=%s response_id=%s source=%s",
             job_id,
             status,
             response_status,
             response_id,
+            response_source,
         )
+
+    @staticmethod
+    def _extract_response_status(job_payload: dict[str, Any]) -> tuple[Any, Any, str]:
+        # Common single-object locations
+        for key in ("response", "myResponse", "submission"):
+            value = job_payload.get(key)
+            if isinstance(value, dict):
+                return value.get("status"), value.get("id"), key
+
+        # Common array locations
+        for key in ("responses", "submissions"):
+            value = job_payload.get(key)
+            if isinstance(value, list) and value:
+                first = value[0]
+                if isinstance(first, dict):
+                    return first.get("status"), first.get("id"), key
+
+        return None, None, "not_exposed_by_endpoint"
 
