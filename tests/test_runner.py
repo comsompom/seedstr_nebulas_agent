@@ -32,6 +32,9 @@ class FakeApi:
         self.uploaded.append(path_obj)
         return {"files": [{"url": f"https://cdn.example/{path_obj.name}"}]}
 
+    def get_job(self, job_id: str) -> dict[str, object]:
+        return {"id": job_id, "status": "PENDING", "response": {"id": "resp-1", "status": "SUBMITTED"}}
+
     def respond_file(self, job_id: str, upload_result: dict[str, object], fallback_text: str) -> dict[str, object]:
         if self.respond_error is not None:
             raise self.respond_error

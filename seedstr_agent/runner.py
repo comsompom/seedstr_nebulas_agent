@@ -210,6 +210,7 @@ class AgentRunner:
                     error=str(exc),
                 )
                 self.logger.info("Job %s already has a submitted response; marking as seen", job_id)
+                self._log_job_server_status(job_id)
                 self._mark_seen(job_id)
                 return "skipped_already_submitted"
             retry_after = self._retry_after_seconds_from_error(exc)
@@ -336,4 +337,27 @@ class AgentRunner:
         self._submission_log_path.parent.mkdir(parents=True, exist_ok=True)
         with self._submission_log_path.open("a", encoding="utf-8") as log_file:
             log_file.write(json.dumps(entry, ensure_ascii=True) + "\n")
+
+    def _log_job_server_status(self, job_id: str) -> None:
+        try:
+            job_payload = self.api.get_job(job_id)
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            self.logger.warning("Could not fetch server status for job %s: %s", job_id, exc)
+            return
+
+        status = job_payload.get("status")
+        response_status = None
+        response_id = None
+        response_obj = job_payload.get("response")
+        if isinstance(response_obj, dict):
+            response_status = response_obj.get("status")
+            response_id = response_obj.get("id")
+
+        self.logger.info(
+            "Server job status for %s: job_status=%s response_status=%s response_id=%s",
+            job_id,
+            status,
+            response_status,
+            response_id,
+        )
 

@@ -90,6 +90,9 @@ class SeedstrApiClient:
     def list_jobs(self, limit: int = 20, offset: int = 0) -> dict[str, Any]:
         return self._request("GET", f"/jobs?limit={limit}&offset={offset}")
 
+    def get_job(self, job_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/jobs/{job_id}")
+
     def accept_job(self, job_id: str) -> dict[str, Any]:
         return self._request("POST", f"/jobs/{job_id}/accept")
 
