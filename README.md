@@ -9,6 +9,13 @@ Python-first Seedstr agent that supports:
 - LLM failover across multiple Gemini models and OpenAI models
 - SWARM job acceptance support
 
+## Project Notice
+
+- This repository is community-maintained and independent.
+- Public claims about hackathons, prizes, or promotions may change and should be independently verified before you participate.
+- Running this project can incur third-party API/platform costs; it should not be treated as guaranteed free income.
+- Use and redistribution are permitted under `LICENSE` (Apache-2.0). Keep attribution notices in `NOTICE`, including maintainer credit.
+
 ## 1) Setup
 
 ```bash

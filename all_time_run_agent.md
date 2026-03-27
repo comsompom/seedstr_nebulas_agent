@@ -1,5 +1,9 @@
 Here is your step-by-step solution to run your agent 24/7 for free, **no credit card required**.
 
+Project notice:
+- This guide is not an official statement for any platform event, hackathon, or prize campaign.
+- Always verify current event terms independently and assume third-party costs/limits may apply.
+
 ---
 
 ### Phase 1: Modify Your Code (Make it "Cloud Ready")
@@ -81,7 +85,7 @@ Render expects a Web Server (like a website), but you have a Background Script. 
     *   Add your keys here (do NOT put them in GitHub):
         *   `SEEDSTR_API_KEY`: `your_key`
         *   `GEMINI_API_KEY`: `your_key`
-        *   `SEEDSTR_BASE_URL`: `https://api.seedstr.io` (or whatever the endpoint is).
+        *   `SEEDSTR_BASE_URL`: `https://www.seedstr.io/api/v2`.
 7.  Click **"Deploy Web Service"**.
 
 *Wait about 2-3 minutes. You should see logs saying "Starting Agent Loop..." and "Running on http://0.0.0.0:xxxx".*
@@ -110,5 +114,5 @@ Right now, Render will shut down your agent if no one visits the website for 15 
 4.  **UptimeRobot:** Hits the Flask website every 5 minutes.
 5.  **Result:** Render sees "traffic" and keeps the server running 24/7 without charging you a cent.
 
-This is the standard, battle-tested method for winning hackathons without spending money.
+This hosting pattern can be useful for low-cost experiments, but availability and limits on free tiers can change over time.
 
